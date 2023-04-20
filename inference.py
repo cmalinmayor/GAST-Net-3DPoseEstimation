@@ -179,7 +179,7 @@ def reconstruction(args, csv_dir, output_dir, video_width=1920, video_height=108
             prediction_new[valid_frames] = prediction
 
             output_file = os.path.join(output_dir, walk_name + ".npy")
-            print('Writing to file {output_file}...')
+            print(f'Writing to file {output_file}...')
             with open(output_file, 'w') as f:
                 np.save(output_file, prediction_new)
 
