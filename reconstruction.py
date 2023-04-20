@@ -6,6 +6,7 @@ import json
 import cv2
 import os
 import argparse
+import csv
 
 from tools.mpii_coco_h36m import coco_h36m, mpii_h36m, coco_h36m_toe_format
 from common.skeleton import Skeleton
@@ -73,7 +74,7 @@ def parse_args():
     parser.add_argument('-vo', '--viz-output', type=str, default='./output/baseball.mp4', metavar='NAME',
                         help='The path of output video')
     parser.add_argument('-kf', '--kpts-format', type=str, default='coco', metavar='NAME',
-                        help='The format of 2D keypoints')
+                        help='The format of 2D keypoints. "csv" for custom csv')
 
     return parser
 
@@ -101,6 +102,74 @@ def get_joints_info(num_joints):
 
     return joints_left, joints_right, h36m_skeleton, keypoints_metadata
 
+def load_csv(file_path, num_joints, num_person=1):
+    # returns only keypoints, no scores, no labels
+    with open(file_path, 'r') as fr:
+        reader = csv.DictReader(fr)
+
+        #num_frames = len(rows)
+        keypoints = [] #np.zeros((num_person, num_frames, num_joints, 2), dtype=np.float32)
+        # COCO Order
+        """joint_names = [
+                'Nose',
+                # No neck
+                'RShoulder',
+                'RElbow',
+                'RWrist',
+                'LShoulder',
+                'LElbow',
+                'LWrist',
+                'RHip',
+                'RKnee',
+                'RAnkle',
+                'LHip',
+                'LKnee',
+                'LAnkle',
+                'REye',
+                'LEye',
+                'REar',
+                'LEar',
+                ]"""
+        joint_names = [
+            'Nose',
+            'LEye',
+            'REar',
+            'REye',
+            'LEar',
+            'LShoulder',
+            'RShoulder',
+            'LElbow',
+            'RElbow',
+            'LWrist',
+            'RWrist',
+            'LHip',
+            'RHip',
+            'LKnee',
+            'RKnee',
+            'LAnkle',
+            'RAnkle',
+        ]
+        dims = ['x', 'y']
+        frame_index = 0
+        for row in reader:
+            # assume only one skeleton per frame
+            frame_info = []  # list of joints within a frame
+            for joint in joint_names:
+                # get location
+                joint_loc = []
+                for dim in dims:
+                    fieldname = f"{joint}_{dim}"
+                    try:
+                        joint_loc.append(float(row[fieldname]))
+                    except ValueError:
+                        joint_loc.append(np.nan)
+                frame_info.append(joint_loc)
+
+            keypoints.append(frame_info)
+            frame_index += 1
+        nparray = np.asarray(keypoints, dtype=np.float32)
+        nparray = np.expand_dims(nparray, 0)
+        return nparray
 
 def load_json(file_path, num_joints, num_person=2):
     with open(file_path, 'r') as fr:
@@ -146,7 +215,7 @@ def load_json(file_path, num_joints, num_person=2):
 
 
 def evaluate(test_generator, model_pos, joints_left, joints_right, return_predictions=False):
-    
+
     with torch.no_grad():
         model_pos.eval()
 
@@ -169,7 +238,6 @@ def evaluate(test_generator, model_pos, joints_left, joints_right, return_predic
             if return_predictions:
                 return predicted_3d_pos.squeeze(0).cpu().numpy()
 
-
 def reconstruction(args):
     """
     Generate 3D poses from 2D keypoints detected from video, and visualize it
@@ -186,7 +254,10 @@ def reconstruction(args):
     adj = adj_mx_from_skeleton(h36m_skeleton)
 
     print('Loading 2D keypoints ...')
-    keypoints, scores, _, _ = load_json(args.keypoints_file, args.num_joints)
+    if args.kpts_format == "csv":
+        keypoints = load_csv(args.keypoints_file, 17)
+    else:
+        keypoints, _, _, _ = load_json(args.keypoints_file, args.num_joints)
 
     # Loading only one person's keypoints
     if len(keypoints.shape) == 4:
@@ -205,11 +276,18 @@ def reconstruction(args):
         keypoints, valid_frames = coco_h36m(keypoints)
     elif args.kpts_format == 'wholebody':
         keypoints, valid_frames = coco_h36m_toe_format(keypoints)
+    elif args.kpts_format == 'csv':
+        keypoints, valid_frames = coco_h36m(keypoints)
+
     else:
         valid_frames = np.where(np.sum(keypoints.reshape(-1, 34), axis=1) != 0)[0]
         assert args.kpts_format == 'h36m'
 
     # Get the width and height of video
+    '''if args.kpts_format == 'csv':
+        width = 1920  # Check these numbers
+        height = 1080
+    else:'''
     cap = cv2.VideoCapture(args.video_path)
     width = int(round(cap.get(cv2.CAP_PROP_FRAME_WIDTH)))
     height = int(round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
@@ -270,10 +348,20 @@ def reconstruction(args):
 if __name__ == '__main__':
     parser = parse_args()
     args = parser.parse_args()
+    path_to_csvs = "/mnt/win_share/AMBIENT/AMBIENT TRI/TRI_skeleton_trajectories/data/skel_data_alphapose/fixed_flips_and_cropped/raw/"
 
+    output_dir = './output'
     # chk_file = '.../epoch_60.bin'
     # kps_file = '.../2d_keypoints.npz'
     # video_path = '.../sittingdown.mp4'
     # viz_output = '.../output_animation.mp4'
-
+    filename = args.keypoints_file
+    walk_name = filename[0:-4]
+    vid_name =  walk_name + ".mp4"
+    path_to_video = f"/mnt/win_share/AMBIENT/Andrea_S/TRI_data/AMB25/{walk_name}/RGB.avi"
+    print(path_to_video)
+    args.keypoints_file = os.path.join(path_to_csvs, filename)
+    args.viz_output = os.path.join(output_dir, vid_name)
+    args.video_path = path_to_video
+    print(args.keypoints_file)
     reconstruction(args)
