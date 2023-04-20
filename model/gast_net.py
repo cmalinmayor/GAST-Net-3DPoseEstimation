@@ -1,5 +1,5 @@
 import torch
-from torchsummary import summary
+# from torchsummary import summary
 import torch.nn as nn
 from model.local_attention import LocalGraph
 from model.global_attention import MultiGlobalGraph, SingleGlobalGraph
@@ -8,7 +8,7 @@ from model.global_attention import MultiGlobalGraph, SingleGlobalGraph
 class GraphAttentionBlock(nn.Module):
     def __init__(self, adj, input_dim, output_dim, p_dropout):
         super(GraphAttentionBlock, self).__init__()
-        
+
         hid_dim = output_dim
         self.relu = nn.ReLU(inplace=True)
 
@@ -254,7 +254,7 @@ class SpatioTemporalModelOptimized1f(SpatioTemporalModelBase):
 if __name__ == "__main__":
     import torch
     import numpy as np
-    import torchsummary
+    # import torchsummary
     from common.skeleton import Skeleton
     from common.graph_utils import adj_mx_from_skeleton
 
