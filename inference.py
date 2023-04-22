@@ -4,6 +4,7 @@ import cv2
 import os
 import argparse
 import csv
+import toml
 
 from tools.mpii_coco_h36m import coco_h36m
 from common.camera import normalize_screen_coordinates, camera_to_world
@@ -113,14 +114,16 @@ def evaluate(test_generator, model_pos, joints_left, joints_right, return_predic
             if return_predictions:
                 return predicted_3d_pos.squeeze(0).cpu().numpy()
 
-def reconstruction(args, csv_dir, output_dir, video_width=1920, video_height=1080):
+def reconstruction(args, csv_dir, output_dir, video_dims, overwrite=True):
     """
     Generate 3D poses from 2D keypoints detected from video, and write to npy file
-    Default width and height are correct for TRI dataset
+    Default width and height are correct for TRI dataset.
+    If overwrite is False, check if file already exists and don't recompute
     """
     # prepare model
     filter_widths = [3, 3, 3]
     channels = 128
+    video_width, video_height = video_dims
 
     h36m_skeleton = Skeleton(parents=[-1, 0, 1, 2, 0, 4, 5, 0, 7, 8, 9, 8, 11, 12, 8, 14, 15],
                                  joints_left=[4, 5, 6, 11, 12, 13],
@@ -148,6 +151,11 @@ def reconstruction(args, csv_dir, output_dir, video_width=1920, video_height=108
     # Getting joint information
     for file in os.listdir(csv_dir):
         if file.endswith('.csv'):
+            walk_name = os.path.splitext(file)[0]
+            output_file = os.path.join(output_dir, walk_name + ".npy")
+            if (not overwrite) and os.path.isfile(output_file):
+                print(f"Skipping {file} as results already exists.")
+                continue
             print(f'Loading 2D keypoints at {file}...')
             keypoints = load_csv(os.path.join(csv_dir, file))
             assert len(keypoints.shape) == 3
@@ -163,7 +171,6 @@ def reconstruction(args, csv_dir, output_dir, video_width=1920, video_height=108
 
             # normalize keypoints
             input_keypoints = normalize_screen_coordinates(keypoints[..., :2], w=video_width, h=video_height)
-            walk_name = os.path.splitext(file)[0]
 
             print(f'Reconstructing...')
             gen = UnchunkedGenerator(None, None, [input_keypoints[valid_frames]],
@@ -178,14 +185,49 @@ def reconstruction(args, csv_dir, output_dir, video_width=1920, video_height=108
             prediction_new = np.zeros((*input_keypoints.shape[:-1], 3), dtype=np.float32)
             prediction_new[valid_frames] = prediction
 
-            output_file = os.path.join(output_dir, walk_name + ".npy")
+
             print(f'Writing to file {output_file}...')
             with open(output_file, 'w') as f:
                 np.save(output_file, prediction_new)
 
 if __name__ == '__main__':
     parser = parse_args()
+    parser.add_argument("-b", "--belmont", action="store_true")
+    parser.add_argument("-t", "--tri", action="store_true")
+    parser.add_argument("-l", "--lakeside", action="store_true")
+    parser.add_argument("-m", "--mdc", action="store_true")
+    parser.add_argument("-o", "--overwrite", action="store_false")
     args = parser.parse_args()
-    tri_csvs = "/mnt/win_share/AMBIENT/AMBIENT TRI/TRI_skeleton_trajectories/data/skel_data_alphapose/fixed_flips_and_cropped/raw/"
-    tri_output_dir = '/mnt/win_share/AMBIENT/AMBIENT TRI/TRI_skeleton_trajectories/data/gastnet/'
-    reconstruction(args, tri_csvs, tri_output_dir)
+
+    base = "/mnt/win_share/AMBIENT/"
+    if args.belmont:
+        print("Belmont")
+        config = toml.load('ambient_configs/belmont.toml')
+        belmont_csvs = base + config["alphapose_csvs"]
+        belmont_output_dir = base + config["gastnet_dir"]
+        belmont_vid_dims = config["vid_dims"]
+        reconstruction(args, belmont_csvs, belmont_output_dir, belmont_vid_dims, overwrite=args.overwrite)
+
+    if args.mdc:
+        print("MDC")
+        config = toml.load('ambient_configs/mdc.toml')
+        mdc_csvs = base + config["alphapose_csvs"]
+        mdc_output_dir = base + config["gastnet_dir"]
+        mdc_vid_dims = config["vid_dims"]
+        reconstruction(args, mdc_csvs, mdc_output_dir, mdc_vid_dims, overwrite=args.overwrite)
+
+    if args.lakeside:
+        print("Lakeside")
+        config = toml.load('ambient_configs/lakeside.toml')
+        lakeside_csvs = base + config["alphapose_csvs"]
+        lakeside_output_dir = base + config["gastnet_dir"]
+        lakeside_vid_dims = config["vid_dims"]
+        reconstruction(args, lakeside_csvs, lakeside_output_dir, lakeside_vid_dims, overwrite=args.overwrite)
+
+    if args.tri:
+        print("TRI")
+        config = toml.load('ambient_configs/tri.toml')
+        tri_csvs = base + config["alphapose_csvs"]
+        tri_output_dir = base + config["gastnet_dir"]
+        tri_vid_dims = config["vid_dims"]
+        reconstruction(args, tri_csvs, tri_output_dir, tri_vid_dims, overwrite=args.overwrite)

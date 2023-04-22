@@ -1,0 +1,6 @@
+# need to prepend AMBIENT base dir (e.g. /mnt/win_share/AMBIENT/)
+alphapose_csvs = "CMM/MDC/fasano_alphapose"
+gastnet_dir = "CMM/MDC/gastnet/"
+gastnet_vis_dir = "CMM/MDC/gastnet_videos"
+vid_dims = [384, 480]
+orig_video_dir = "Andrea_S/Fasano_dataset_2021/objective_2/cropped_and_split_vids/"
