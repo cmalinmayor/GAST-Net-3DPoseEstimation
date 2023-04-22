@@ -55,14 +55,14 @@ def get_fps(filename):
 
 def read_video(filename, skip=0, limit=-1):
     w, h = get_resolution(filename)
-    
+
     command = ['ffmpeg',
             '-i', filename,
             '-f', 'image2pipe',
             '-pix_fmt', 'rgb24',
             '-vsync', '0',
             '-vcodec', 'rawvideo', '-']
-    
+
     i = 0
     with sp.Popen(command, stdout = sp.PIPE, bufsize=-1) as pipe:
         while True:
@@ -74,7 +74,7 @@ def read_video(filename, skip=0, limit=-1):
                 continue
             if i > skip:
                 yield np.frombuffer(data, dtype='uint8').reshape((h, w, 3))
-            
+
 
 def downsample_tensor(X, factor):
     length = X.shape[0]//factor * factor
@@ -132,14 +132,14 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
             all_frames.append(f)
         effective_length = min(keypoints.shape[0], len(all_frames))
         all_frames = all_frames[:effective_length]
-        
+
         keypoints = keypoints[input_video_skip:] # todo remove
         for idx in range(len(poses)):
             poses[idx] = poses[idx][input_video_skip:]
-        
+
         if fps is None:
             fps = get_fps(input_video_path)
-    
+
     if downsample > 1:
         keypoints = downsample_tensor(keypoints, downsample)
         all_frames = downsample_tensor(np.array(all_frames), downsample).astype('uint8')
@@ -152,7 +152,7 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
     image = None
     lines = []
     points = None
-    
+
     if limit < 1:
         limit = len(all_frames)
     else:
@@ -163,8 +163,11 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
         nonlocal initialized, image, lines, points
 
         for n, ax in enumerate(ax_3d):
-            ax.set_xlim3d([-radius/2 + trajectories[n][i, 0], radius/2 + trajectories[n][i, 0]])
-            ax.set_ylim3d([-radius/2 + trajectories[n][i, 1], radius/2 + trajectories[n][i, 1]])
+            try:
+                ax.set_xlim3d([-radius/2 + trajectories[n][i, 0], radius/2 + trajectories[n][i, 0]])
+                ax.set_ylim3d([-radius/2 + trajectories[n][i, 1], radius/2 + trajectories[n][i, 1]])
+            except:
+                pass
 
         # Update 2D poses
         joints_right_2d = keypoints_metadata['keypoints_symmetry'][1]
@@ -172,11 +175,11 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
         colors_2d[joints_right_2d] = 'red'
         if not initialized:
             image = ax_in.imshow(all_frames[i], aspect='equal')
-            
+
             for j, j_parent in enumerate(parents):
                 if j_parent == -1:
                     continue
-                    
+
                 if len(parents) == keypoints.shape[1] and keypoints_metadata['layout_name'] != 'coco':
                     # Draw skeleton only if keypoints match (otherwise we don't have the parents definition)
                     lines.append(ax_in.plot([keypoints[i, j, 0], keypoints[i, j_parent, 0]],
@@ -198,7 +201,7 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
             for j, j_parent in enumerate(parents):
                 if j_parent == -1:
                     continue
-                
+
                 if len(parents) == keypoints.shape[1] and keypoints_metadata['layout_name'] != 'coco':
                     lines[j-1][0].set_data([keypoints[i, j, 0], keypoints[i, j_parent, 0]],
                                            [keypoints[i, j, 1], keypoints[i, j_parent, 1]])
@@ -210,11 +213,11 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
                     lines_3d[n][j-1][0].set_3d_properties([pos[j, 2], pos[j_parent, 2]], zdir='z')
 
             points.set_offsets(keypoints[i])
-        
+
         print('{}/{}      '.format(i, limit), end='\r')
 
     fig.tight_layout()
-    
+
     anim = FuncAnimation(fig, update_video, frames=np.arange(0, limit), interval=1000/fps, repeat=False)
     if output.endswith('.mp4'):
         Writer = writers['ffmpeg']
